@@ -70,7 +70,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         identity = client_ip(request)
-        result = await ratelimit.check(get_redis(), identity, now=time.time())
+        try:
+            result = await ratelimit.check(get_redis(), identity, now=time.time())
+        except Exception as exc:
+            # Fail-open if rate limiter / Redis is unreachable so the site stays up.
+            log.warning("rate_limit_bypassed", error=str(exc))
+            return await call_next(request)
 
         if not result.allowed:
             metrics.RATE_LIMITED.inc()

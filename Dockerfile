@@ -8,6 +8,9 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# Force IPv4 precedence in glibc getaddrinfo to prevent IPv6 routing issues on cloud container networks.
+RUN echo "precedence ::ffff:0:0/96 100" >> /etc/gai.conf
+
 # Install deps first for layer caching.
 COPY requirements.txt .
 RUN pip install -r requirements.txt

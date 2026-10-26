@@ -9,9 +9,8 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: DATABASE_URL
-        sync: false # Set via Render Dashboard -> Secrets (Neon Postgres URL)
+        sync: false # Set via Render Dashboard -> Secrets (Supabase or Neon Postgres URL)
       - key: REDIS_URL
-        sync: false # Set via Render Dashboard -> Secrets (Upstash Redis URL)
+        sync: false # Set via Render Dashboard -> Secrets (Optional Upstash Redis URL)
       - key: USE_FAKE_REDIS
-        value: "false"
-
+        value: "true"

@@ -6,6 +6,7 @@ The only backend-specific concern — connection pooling — is handled here.
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import Any
 
 import structlog
 from sqlalchemy.engine.url import make_url
@@ -54,7 +55,7 @@ def _sanitize_db_url(url: str) -> str:
                 continue
             else:
                 cleaned_params.append((k, v))
-        if not has_ssl and "neon.tech" in parts.netloc:
+        if not has_ssl and any(h in parts.netloc for h in ("neon.tech", "supabase.com", "supabase.co")):
             cleaned_params.append(("ssl", "require"))
         new_query = urlencode(cleaned_params)
         url = urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
@@ -76,12 +77,18 @@ def _create_engine() -> AsyncEngine:
                 poolclass=StaticPool,
             )
         return create_async_engine(url, future=True, pool_pre_ping=True)
+
+    connect_args: dict[str, Any] = {}
+    if "pooler" in url or "-pooler" in url or ":6543" in url:
+        connect_args["statement_cache_size"] = 0
+
     return create_async_engine(
         url,
         future=True,
         pool_pre_ping=True,
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
+        connect_args=connect_args,
     )
 
 
@@ -133,7 +140,7 @@ async def init_models() -> None:
             target=host_info,
             error=str(exc),
             hint=(
-                "If using Neon/Postgres, verify DATABASE_URL in Render. "
+                "If using Supabase/Neon, verify DATABASE_URL in Render. "
                 "Ensure hostname is valid (not 'db' or 'localhost') and special "
                 "characters in passwords (e.g. '@' -> '%40') are URL-encoded."
             ),
