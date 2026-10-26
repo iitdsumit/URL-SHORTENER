@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
+import structlog
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -17,6 +19,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.config import get_settings
 
+log = structlog.get_logger(__name__)
+
 _engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
@@ -24,6 +28,9 @@ _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 def _sanitize_db_url(url: str) -> str:
     """Normalize database URL for async drivers and strip libpq-only parameters."""
     from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+    # Strip accidental leading/trailing whitespace, newlines, or outer quotes
+    url = url.strip().strip("'\"")
 
     if url.startswith("postgres://"):
         url = "postgresql+asyncpg://" + url[len("postgres://"):]
@@ -108,8 +115,30 @@ async def init_models() -> None:
     """
     from app.models import Base
 
-    async with get_engine().begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    sanitized_url = _sanitize_db_url(get_settings().database_url)
+    try:
+        parsed = make_url(sanitized_url)
+        host_info = f"{parsed.host}:{parsed.port or 5432}/{parsed.database}"
+    except Exception:
+        host_info = "unparseable-url"
+
+    log.info("database_connecting", target=host_info)
+    try:
+        async with get_engine().begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        log.info("database_ready", target=host_info)
+    except Exception as exc:
+        log.error(
+            "database_connect_failed",
+            target=host_info,
+            error=str(exc),
+            hint=(
+                "If using Neon/Postgres, verify DATABASE_URL in Render. "
+                "Ensure hostname is valid (not 'db' or 'localhost') and special "
+                "characters in passwords (e.g. '@' -> '%40') are URL-encoded."
+            ),
+        )
+        raise
 
 
 async def dispose_engine() -> None:
