@@ -19,7 +19,8 @@ COPY locustfile.py pyproject.toml ./
 RUN useradd --create-home --uid 1000 appuser
 USER appuser
 
-EXPOSE 8000
+EXPOSE 8000 10000
 
-# Default command runs the API; the worker overrides this in compose.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# Default command runs the API; reads dynamic PORT and WEB_CONCURRENCY from the environment
+# with fallbacks for local / docker-compose runs.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WEB_CONCURRENCY:-1} --proxy-headers --forwarded-allow-ips '*'"]
